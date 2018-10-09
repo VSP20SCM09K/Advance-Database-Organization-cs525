@@ -38,6 +38,7 @@ static void testReadPage (void);
 static void testFIFO (void);
 static void testLRU (void);
 
+
 // main method
 int 
 main (void) 
@@ -108,7 +109,7 @@ checkDummyPages(BM_BufferPool *bm, int num)
       CHECK(pinPage(bm, h, i));
 
       sprintf(expected, "%s-%i", "Page", h->pageNum);
-      ASSERT_EQUALS_STRING(expected, h->data, "reading back dummy page content");
+      ASSERT_EQUALS_STRING(expected, h->data, "reading back dummy page content");// the dummy page content is read
 
       CHECK(unpinPage(bm,h));
     }
@@ -185,7 +186,7 @@ testFIFO ()
     {
       pinPage(bm, h, requests[i]);
       unpinPage(bm, h);
-      ASSERT_EQUALS_POOL(poolContents[i], bm, "check pool content");
+      ASSERT_EQUALS_POOL(poolContents[i], bm, "check pool content"); // --- checking the pool contents --- 
     }
 
   // pin one page and test remainder
@@ -286,7 +287,7 @@ testLRU (void)
       pinPage(bm, h, 5 + i);
       unpinPage(bm, h);
       ASSERT_EQUALS_POOL(poolContents[snapshot], bm, "check pool content using pages");
-      snapthot++;
+      snapshot++;
   }
 
   // check number of write IOs
@@ -300,3 +301,6 @@ testLRU (void)
   free(h);
   TEST_DONE();
 }
+
+
+

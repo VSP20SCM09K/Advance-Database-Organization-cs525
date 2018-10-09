@@ -33,6 +33,26 @@ typedef struct BM_PageHandle {
   char *data;
 } BM_PageHandle;
 
+typedef struct pageInfo {
+	char *bufferData;
+	int isDirty;
+	int fixCount;
+	int pageNum;
+	int frameNum;
+	struct pageInfo *nextPageInfo;
+	struct pageInfo *prevPageInfo;
+} pageInfo;
+
+typedef struct Queue {
+	pageInfo *head;
+	pageInfo *tail;
+	int filledframes;
+	int totalNumOfFrames;
+} Queue;
+
+pageInfo* createFrame(pageInfo *);
+pageInfo* createBufferOfSize(int ,pageInfo *);
+
 // convenience macros
 #define MAKE_POOL()					\
   ((BM_BufferPool *) malloc (sizeof(BM_BufferPool)))
