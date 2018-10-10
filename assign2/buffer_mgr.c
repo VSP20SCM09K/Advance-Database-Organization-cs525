@@ -9,18 +9,19 @@
 #define RC_QUEUE_IS_EMPTY 5;
 #define RC_NO_FREE_BUFFER_ERROR 6;
 
-SM_FileHandle *fh;
-Queue *q;
+SM_FileHandle *filehandler;
+Queue *queue;
 int readIO;
 int writeIO;
 
 
-RC pinPageLRU(BM_BufferPool * const bm, BM_PageHandle * const page,
-		const PageNumber pageNum);
-RC pinPageFIFO(BM_BufferPool *const bm, BM_PageHandle *const page,const PageNumber pageNum);
+RC pinPageLRU(BM_BufferPool * const bm, BM_PageHandle * const page,const PageNumber pageNum);  //pins the page with page number with LRU replacement strategy
+RC pinPageFIFO(BM_BufferPool *const bm, BM_PageHandle *const page,const PageNumber pageNum); // pins the page with page number with FIFO replacement strategy
 
 
-void createQueue(BM_BufferPool *const bm){
+//creating a queue for frame list
+void createQueue(BM_BufferPool *const bm)
+{
 	pageInfo *newPage[bm->numPages];
 	int lastPage = (bm->numPages) - 1;
 	int n;
@@ -53,15 +54,18 @@ void createQueue(BM_BufferPool *const bm){
 			newPage[n]->prevPageInfo = newPage[n - 1];
 		}
 	}
-	q->head = newPage[0];
-	q->tail = newPage[lastPage];
-	q->filledframes = 0;
-	q->totalNumOfFrames = bm->numPages;
+	queue->head = newPage[0];
+	queue->tail = newPage[lastPage];
+	queue->filledframes = 0;
+	queue->totalNumOfFrames = bm->numPages;
 }
 
-RC emptyQueue() {return (q->filledframes == 0);}
+//emptying the queue
+RC emptyQueue() {return (queue->filledframes == 0);}
 
-pageInfo* createNewList(const PageNumber pageNum) {
+//creating the new list for page
+pageInfo* createNewList(const PageNumber pageNum) 
+{
 	pageInfo* newpinfo = (pageInfo*) malloc(sizeof(pageInfo));
 	char *c = (char*) calloc(PAGE_SIZE, sizeof(char));
 
@@ -75,40 +79,52 @@ pageInfo* createNewList(const PageNumber pageNum) {
 	
 	return newpinfo;
 }
-
-RC deQueue() {
-	if (emptyQueue()) {
+//dequeing the framelist
+RC deQueue() 
+{
+	if (emptyQueue())
+	{
 		return RC_QUEUE_IS_EMPTY;
 	}
 
-	pageInfo *p = q->head;
-	for (int i = 0; i < q->filledframes; i++) {
-		if (i == (q->filledframes-1)) {
-			q->tail = p;
-		} else
+	pageInfo *p = queue->head;
+	for (int i = 0; i < queue->filledframes; i++)
+	{
+		if (i == (queue->filledframes-1))
+		{
+			queue->tail = p;
+		} 
+		else
 			p = p->nextPageInfo;
 	}
 	
 
 	int tail_pnum; 
 	int pageDelete=0;
-	pageInfo *pinfo = q->tail;
-	for (int i = 0; i < q->totalNumOfFrames; i++) {
+	pageInfo *pinfo = queue->tail;
+	for (int i = 0; i < queue->totalNumOfFrames; i++)
+	{
 
-		if ((pinfo->fixCount) == 0) {
+		if ((pinfo->fixCount) == 0)
+		{
 
-			if (pinfo->pageNum == q->tail->pageNum) {
+			if (pinfo->pageNum == queue->tail->pageNum)
+			{
 				pageDelete=pinfo->pageNum;
-				q->tail = (q->tail->prevPageInfo);
-				q->tail->nextPageInfo = NULL;
+				queue->tail = (queue->tail->prevPageInfo);
+				queue->tail->nextPageInfo = NULL;
  
-			} else {
+			}
+			else
+			{
 				pageDelete=pinfo->pageNum;
 				pinfo->prevPageInfo->nextPageInfo = pinfo->nextPageInfo;
 				pinfo->nextPageInfo->prevPageInfo = pinfo->prevPageInfo;
 			}
 
-		} else {
+		}
+		else 
+		{
 			tail_pnum=pinfo->pageNum;
 			//printf("\n next node%d", pinfo->pageNum);
 			pinfo = pinfo->prevPageInfo;
@@ -116,28 +132,27 @@ RC deQueue() {
 		}
 	}
 
-	if (tail_pnum == q->tail->pageNum){
-		
+	if (tail_pnum == queue->tail->pageNum)
+	{	
 		return 0;		//Add error
-
 	}
 
-	if (pinfo->isDirty == 1) {
-		writeBlock(pinfo->pageNum, fh, pinfo->bufferData);
-		
+	if (pinfo->isDirty == 1) 
+	{
+		writeBlock(pinfo->pageNum, filehandler, pinfo->bufferData);	
 		writeIO++;
 	}
 
-	q->filledframes--;
-
+	queue->filledframes--;
 	return pageDelete;
 }
 
-
-RC Enqueue(BM_PageHandle * const page, const PageNumber pageNum,BM_BufferPool * const bm) {
+//enqueing the page frame
+RC Enqueue(BM_PageHandle * const page, const PageNumber pageNum,BM_BufferPool * const bm) 
+{
 
 	int pageDelete=-1;
-	if (q->filledframes == q->totalNumOfFrames ) { //If frames are full remove a page
+	if (queue->filledframes == queue->totalNumOfFrames ) { //If frames are full remove a page
 		pageDelete=deQueue();
 	}
 
@@ -146,85 +161,94 @@ RC Enqueue(BM_PageHandle * const page, const PageNumber pageNum,BM_BufferPool * 
 
 	if (emptyQueue()) {
 
-		readBlock(pinfo->pageNum,fh,pinfo->bufferData);
+		readBlock(pinfo->pageNum,filehandler,pinfo->bufferData);
 		page->data = pinfo->bufferData;
 		readIO++;
 
-		pinfo->frameNum = q->head->frameNum;
-		pinfo->nextPageInfo = q->head;
-		q->head->prevPageInfo = pinfo;
+		pinfo->frameNum = queue->head->frameNum;
+		pinfo->nextPageInfo = queue->head;
+		queue->head->prevPageInfo = pinfo;
 		pinfo->pageNum = pageNum;
 		page->pageNum= pageNum;
-		q->head = pinfo;
+		queue->head = pinfo;
 		
 
 	} else {  
-		readBlock(pageNum, fh, pinfo->bufferData);
+		readBlock(pageNum, filehandler, pinfo->bufferData);
 		if(pageDelete==-1)
-			pinfo->frameNum = q->head->frameNum+1;
+			pinfo->frameNum = queue->head->frameNum+1;
 		else
 			pinfo->frameNum=pageDelete;
 		page->data = pinfo->bufferData;
 		readIO++;
-		pinfo->nextPageInfo = q->head;
-		q->head->prevPageInfo = pinfo;
-		q->head = pinfo;
+		pinfo->nextPageInfo = queue->head;
+		queue->head->prevPageInfo = pinfo;
+		queue->head = pinfo;
 		page->pageNum= pageNum;
 		
 
 	}
-	q->filledframes++;
+	queue->filledframes++;
 
 	return RC_OK; 
 }
 
-
-
-
-
-RC pinPageLRU(BM_BufferPool * const bm, BM_PageHandle * const page,
-		const PageNumber pageNum) {
+//pins the page with page number with LRU replacement strategy
+RC pinPageLRU(BM_BufferPool * const bm, BM_PageHandle * const page,const PageNumber pageNum)
+{
 
 	int pageFound = 0;
-	pageInfo *pinfo = q->head;
+	pageInfo *pinfo = queue->head;
 	int i;
-	for ( i= 0; i < bm->numPages; i++) {
-		if (pageFound == 0) {
-			if (pinfo->pageNum == pageNum) {
+	//find the node with given page number
+	for ( i= 0; i < bm->numPages; i++)
+	{
+		if (pageFound == 0) 
+		{
+			if (pinfo->pageNum == pageNum)
+			{
 				pageFound = 1;
 				break;
 			}
 			else
-			pinfo = pinfo->nextPageInfo;
+				pinfo = pinfo->nextPageInfo;
 		}
 	}
 
 	if (pageFound == 0)
 		Enqueue(page,pageNum,bm);
 
-	if (pageFound == 1) {
+	//provide the client with the data and details of page and if pinned then increase the fix count
+	if (pageFound == 1)
+	{
 		pinfo->fixCount++;
 		page->data = pinfo->bufferData;
 		page->pageNum=pageNum;
-		if (pinfo == q->head) {
-			pinfo->nextPageInfo = q->head;
-			q->head->prevPageInfo = pinfo;
-			q->head = pinfo;
+		
+		if (pinfo == queue->head)
+		{
+			pinfo->nextPageInfo = queue->head;
+			queue->head->prevPageInfo = pinfo;
+			queue->head = pinfo;
 		}
-
-		if (pinfo != q->head) {
+		// To make the given node the head of the list
+		if (pinfo != queue->head)
+		{
 			pinfo->prevPageInfo->nextPageInfo = pinfo->nextPageInfo;
-			if (pinfo->nextPageInfo) {
+			if (pinfo->nextPageInfo)
+			{
 				pinfo->nextPageInfo->prevPageInfo = pinfo->prevPageInfo;
 
-				if (pinfo == q->tail) {
-					q->tail = pinfo->prevPageInfo;
-					q->tail->nextPageInfo = NULL;
+				if (pinfo == queue->tail)
+				{
+					queue->tail = pinfo->prevPageInfo;
+					queue->tail->nextPageInfo = NULL;
 				}
-				pinfo->nextPageInfo = q->head;
+				
+				pinfo->nextPageInfo = queue->head;
 				pinfo->prevPageInfo = NULL;
 				pinfo->nextPageInfo->prevPageInfo = pinfo;
-				q->head = pinfo;
+				queue->head = pinfo;
 			}
 		}
 	}
@@ -232,8 +256,9 @@ RC pinPageLRU(BM_BufferPool * const bm, BM_PageHandle * const page,
 	return RC_OK;
 }
 
-RC pinPage(BM_BufferPool * const bm, BM_PageHandle * const page,
-		const PageNumber pageNum){
+//pins the page with page number
+RC pinPage(BM_BufferPool * const bm, BM_PageHandle * const page,const PageNumber pageNum)
+{
 	int res;
 	if(bm->strategy==RS_FIFO)
 		res=pinPageFIFO(bm,page,pageNum);
@@ -242,8 +267,9 @@ RC pinPage(BM_BufferPool * const bm, BM_PageHandle * const page,
 	return res;
 }
 
-
-void updateBM_BufferPool(BM_BufferPool *const bm, const char *const pageFileName, const int numPages, ReplacementStrategy strategy){
+//
+void updateBM_BufferPool(BM_BufferPool *const bm, const char *const pageFileName, const int numPages, ReplacementStrategy strategy)
+{
 
 	 char* buffersize = (char *)calloc(numPages,sizeof(char)*PAGE_SIZE);
 
@@ -254,16 +280,17 @@ void updateBM_BufferPool(BM_BufferPool *const bm, const char *const pageFileName
 	
 }
 
+//creates a new buffer pool with numPages page frames using the page replacement strategy
 RC initBufferPool(BM_BufferPool *const bm, const char *const pageFileName, const int numPages, ReplacementStrategy strategy, void *stratData)
 {
-       	    readIO = 0;
-	    writeIO = 0;
-	   fh = (SM_FileHandle *)malloc(sizeof(SM_FileHandle));
-	   q = (Queue *)malloc(sizeof(Queue));
+       readIO = 0;
+	   writeIO = 0;
+	   filehandler = (SM_FileHandle *)malloc(sizeof(SM_FileHandle));
+	   queue = (Queue *)malloc(sizeof(Queue));
 
 	  updateBM_BufferPool(bm,pageFileName,numPages,strategy);
 
-	  openPageFile(bm->pageFile,fh);
+	  openPageFile(bm->pageFile,filehandler);
 
 	  createQueue(bm);
 
@@ -271,37 +298,39 @@ RC initBufferPool(BM_BufferPool *const bm, const char *const pageFileName, const
 
 }
 
+//destroys a buffer pool
 RC shutdownBufferPool(BM_BufferPool *const bm)
 {
 	int i, returncode = -1;
 	pageInfo *pinfo=NULL,*temp=NULL;
 
-	pinfo=q->head;
-	for(i=0; i< q->filledframes ; i++)
+	pinfo=queue->head;
+	for(i=0; i< queue->filledframes ; i++)
 	{
 		if(pinfo->fixCount==0 && pinfo->isDirty == 1)
 		{
-			writeBlock(pinfo->pageNum,fh,pinfo->bufferData);
+			writeBlock(pinfo->pageNum,filehandler,pinfo->bufferData);
 			writeIO++;
 			pinfo->isDirty=0;
 			}
 			pinfo=pinfo->nextPageInfo;		
 	}
-	closePageFile(fh);
+	closePageFile(filehandler);
 	
 	return RC_OK;
 }
 
+//causes all dirty pages (with fix count 0) from the buffer pool to be written to disk.
 RC forceFlushPool(BM_BufferPool *const bm)
 {
 	int i;
 	pageInfo *temp1;
-	temp1 = q->head;
-	for(i=0; i< q->totalNumOfFrames; i++)
+	temp1 = queue->head;
+	for(i=0; i< queue->totalNumOfFrames; i++)
 	{
 		if((temp1->isDirty==1) && (temp1->fixCount==0))
 		{
-			writeBlock(temp1->pageNum,fh,temp1->bufferData);
+			writeBlock(temp1->pageNum,filehandler,temp1->bufferData);
 			writeIO++;
 			temp1->isDirty=0;
 			
@@ -313,10 +342,12 @@ RC forceFlushPool(BM_BufferPool *const bm)
 	return RC_OK;
 }
 
-RC unpinPage (BM_BufferPool *const bm, BM_PageHandle *const page){
+//unpins the page 
+RC unpinPage (BM_BufferPool *const bm, BM_PageHandle *const page)
+{
 	pageInfo *temp;
 	int i;
-	temp = q->head;
+	temp = queue->head;
 	
 	for(i=0; i < bm->numPages; i++){
 		if(temp->pageNum==page->pageNum)
@@ -331,10 +362,12 @@ RC unpinPage (BM_BufferPool *const bm, BM_PageHandle *const page){
 	return RC_OK;
 }
 
-RC forcePage (BM_BufferPool *const bm, BM_PageHandle *const page){
+//write the current content of the page back to the page file on disk
+RC forcePage (BM_BufferPool *const bm, BM_PageHandle *const page)
+{
 	pageInfo *temp;
 	int i;
-	temp = q->head;
+	temp = queue->head;
 	
 	for(i=0; i < bm->numPages; i++){
 		if(temp->pageNum==page->pageNum)
@@ -346,7 +379,7 @@ RC forcePage (BM_BufferPool *const bm, BM_PageHandle *const page){
 
 	if(i == bm->numPages)
 		return 1;          //give error code
-	if((flag=writeBlock(temp->pageNum,fh,temp->bufferData))==0)
+	if((flag=writeBlock(temp->pageNum,filehandler,temp->bufferData))==0)
 		writeIO++;
 	else
 		return RC_WRITE_FAILED;
@@ -354,11 +387,12 @@ RC forcePage (BM_BufferPool *const bm, BM_PageHandle *const page){
 	return RC_OK;
 }
 
+//marks a page as a dirtyx`
 RC markDirty (BM_BufferPool *const bm, BM_PageHandle *const page)
 {
 	pageInfo *temp;
 	int i;
-	temp = q->head;
+	temp = queue->head;
 	
 	for(i=0; i < bm->numPages; i++){
 		if(temp->pageNum==page->pageNum)
@@ -374,51 +408,64 @@ RC markDirty (BM_BufferPool *const bm, BM_PageHandle *const page)
 }
 
 //------------Statistics Functions-----------------
-PageNumber *getFrameContents (BM_BufferPool *const bm){
+
+//returns an array of PageNumbers (of size numPages) where the ith element is the number of the page stored in the ith page frame
+PageNumber *getFrameContents (BM_BufferPool *const bm)
+{
 	PageNumber (*pages)[bm->numPages];
 	int i;
 	pages=calloc(bm->numPages,sizeof(PageNumber));
 	pageInfo *temp;
-	for(i=0; i< bm->numPages;i++){	
-       for(temp=q->head ; temp!=NULL; temp=temp->nextPageInfo){
-	           if(temp->frameNum ==i){
-		       (*pages)[i] = temp->pageNum;
-			   break;
+	for(i=0; i< bm->numPages;i++)
+	{	
+       for(temp=queue->head ; temp!=NULL; temp=temp->nextPageInfo)
+       {
+	           if(temp->frameNum ==i)
+	           {
+		       		(*pages)[i] = temp->pageNum;
+			   		break;
 				}
 			}
 		}
 	return *pages;
 }
 
-bool *getDirtyFlags (BM_BufferPool *const bm){
+//returns an array of bools (of size numPages) where the ith element is TRUE if the page stored in the ith page frame is dirty.
+bool *getDirtyFlags (BM_BufferPool *const bm)
+{
 	bool (*isDirty)[bm->numPages];
 	int i;
 	isDirty=calloc(bm->numPages,sizeof(PageNumber));
 	pageInfo *temp;
 	
-	for(i=0; i< bm->numPages ;i++){
-		for(temp=q->head ; temp!=NULL; temp=temp->nextPageInfo){
-           if(temp->frameNum ==i){
-		if(temp->isDirty==1)
-			(*isDirty)[i]=TRUE;
-		else
-			(*isDirty)[i]=FALSE;
-		break;
-	}
+	for(i=0; i< bm->numPages ;i++)
+	{
+		for(temp=queue->head ; temp!=NULL; temp=temp->nextPageInfo)
+		{
+           if(temp->frameNum ==i)
+           {
+				if(temp->isDirty==1)
+					(*isDirty)[i]=TRUE;
+				else
+					(*isDirty)[i]=FALSE;
+				break;
+			}
 		}
 	}
 	return *isDirty;
 
 }
 
-int *getFixCounts (BM_BufferPool *const bm){
+//returns an array of ints (of size numPages) where the ith element is the fix count of the page stored in the ith page frame
+int *getFixCounts (BM_BufferPool *const bm)
+{
 	int (*fixCounts)[bm->numPages];
 	int i;
 	fixCounts=calloc(bm->numPages,sizeof(PageNumber));
 	pageInfo *temp;
 
 	for(i=0; i< bm->numPages;i++){	
-       for(temp=q->head ; temp!=NULL; temp=temp->nextPageInfo){
+       for(temp=queue->head ; temp!=NULL; temp=temp->nextPageInfo){
 	           if(temp->frameNum ==i){
 		       (*fixCounts)[i] = temp->fixCount;
 			   break;
@@ -428,24 +475,33 @@ int *getFixCounts (BM_BufferPool *const bm){
 	return *fixCounts;
 }
 
-int getNumReadIO (BM_BufferPool *const bm){
+//returns the number of pages that have been read from disk since a buffer pool has been initialized
+int getNumReadIO (BM_BufferPool *const bm)
+{
 	return readIO;
 }
 
-int getNumWriteIO (BM_BufferPool *const bm){
+//returns the number of pages written to the page file since the buffer pool has been initialized
+int getNumWriteIO (BM_BufferPool *const bm)
+{
 	return writeIO;
 }
 
-
+//pins the page with page number with FIFO replacement strategy
 RC pinPageFIFO(BM_BufferPool *const bm, BM_PageHandle *const page,const PageNumber pageNum)
 {
 		int pageFound = 0,numPages;
 		numPages = bm->numPages;
 			pageInfo *list=NULL,*temp=NULL,*temp1=NULL;
-			list = q->head;
-			for (int i = 0; i < numPages; i++) {
-				if (pageFound == 0) {
-					if (list->pageNum == pageNum) {
+			list = queue->head;
+
+			//find the node with given page number
+			for (int i = 0; i < numPages; i++)
+			{
+				if (pageFound == 0) 
+				{
+					if (list->pageNum == pageNum)
+					{
 						pageFound = 1;
 						break;
 					}
@@ -454,6 +510,7 @@ RC pinPageFIFO(BM_BufferPool *const bm, BM_PageHandle *const page,const PageNumb
 				}
 			}
 
+			//provide the client with the data and details of page and if pinned then increase the fix count
 			if (pageFound == 1 )
 			{
 				list->fixCount++;
@@ -464,36 +521,37 @@ RC pinPageFIFO(BM_BufferPool *const bm, BM_PageHandle *const page,const PageNumb
 				return RC_OK;
 			}
 			//free(list);
-				temp = q->head;
+				temp = queue->head;
 				int returncode = -1;
 				
-					
-			while (q->filledframes < q->totalNumOfFrames)
+			//frames in the memory are less than the total available frames, find out the first free frame from the head
+			while (queue->filledframes < queue->totalNumOfFrames)
 			{
 				if(temp->pageNum == -1)
 				{
-			temp->fixCount = 1;
-			temp->isDirty = 0;
-			temp->pageNum = pageNum;
-			page->pageNum= pageNum;
-			
-			q->filledframes = q->filledframes + 1 ;
-			
-			readBlock(temp->pageNum,fh,temp->bufferData);
-			
-			page->data = temp->bufferData;
-			readIO++;
-			returncode = 0;
-			break;
+					temp->fixCount = 1;
+					temp->isDirty = 0;
+					temp->pageNum = pageNum;
+					page->pageNum= pageNum;
+					
+					queue->filledframes = queue->filledframes + 1 ;
+					
+					readBlock(temp->pageNum,filehandler,temp->bufferData);
+					
+					page->data = temp->bufferData;
+					readIO++;
+					returncode = 0;
+					break;
  				}
-			else
-				temp = temp->nextPageInfo;
+				else
+					temp = temp->nextPageInfo;
 			}
 			
 			if(returncode == 0)
-			return RC_OK;
+				return RC_OK;
 		
 		
+		    // To create a new node
 			pageInfo *addnode = (pageInfo *) malloc (sizeof(pageInfo));
 			addnode->fixCount = 1;
 			addnode->isDirty = 0;
@@ -501,15 +559,17 @@ RC pinPageFIFO(BM_BufferPool *const bm, BM_PageHandle *const page,const PageNumb
 			addnode->bufferData = NULL;
 			addnode->nextPageInfo = NULL;
 			page->pageNum= pageNum;
-			addnode->prevPageInfo = q->tail;
-			temp = q->head;
+			addnode->prevPageInfo = queue->tail;
+			temp = queue->head;
+
 			int i;
+			
 			for(i=0; i<numPages ;i++)
 			{
 				if((temp->fixCount)== 0)
 					break;
-	        else
-				temp = temp->nextPageInfo;
+	        	else
+					temp = temp->nextPageInfo;
 			}
 
 			if(i==numPages)
@@ -518,37 +578,43 @@ RC pinPageFIFO(BM_BufferPool *const bm, BM_PageHandle *const page,const PageNumb
 			}
 
 			temp1=temp;
-				if(temp == q->head)
-				{
 
-					q->head = q->head->nextPageInfo;
-					q->head->prevPageInfo = NULL;
+			// To make the given node the head of the list
+			if(temp == queue->head)
+			{
 
-				}
-				else if(temp == q->tail)
-				{
-					q->tail = temp->prevPageInfo;
-					addnode->prevPageInfo=q->tail;
-				}
-				else{
-					temp->prevPageInfo->nextPageInfo = temp->nextPageInfo;
-					temp->nextPageInfo->prevPageInfo=temp->prevPageInfo;
-					}
+				queue->head = queue->head->nextPageInfo;
+				queue->head->prevPageInfo = NULL;
 
-				if(temp1->isDirty == 1)
-				{
-				 writeBlock(temp1->pageNum,fh,temp1->bufferData);
-				 writeIO++;
-				}
+			}
+			else if(temp == queue->tail)
+			{
+				queue->tail = temp->prevPageInfo;
+				addnode->prevPageInfo=queue->tail;
+			}
+			else
+			{
+				temp->prevPageInfo->nextPageInfo = temp->nextPageInfo;
+				temp->nextPageInfo->prevPageInfo=temp->prevPageInfo;
+			}
+
+			// If the frame to be replaced is dirty, write it back to the disk.
+			if(temp1->isDirty == 1)
+			{
+				writeBlock(temp1->pageNum,filehandler,temp1->bufferData);
+			 	writeIO++;
+			}
+
 			addnode->bufferData = temp1->bufferData;
 			addnode->frameNum = temp1->frameNum;
 			
-			readBlock(pageNum,fh,addnode->bufferData);
+			readBlock(pageNum,filehandler,addnode->bufferData);
 			page->data = addnode->bufferData;
 			readIO++;
 			
-			q->tail->nextPageInfo = addnode;
-			q->tail=addnode;
-           return RC_OK;
+			queue->tail->nextPageInfo = addnode;
+			queue->tail=addnode;
+            
+            return RC_OK;
 
 }
