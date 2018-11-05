@@ -26,6 +26,7 @@ extern RC insertRecord (RM_TableData *rel, Record *record);
 extern RC deleteRecord (RM_TableData *rel, RID id);
 extern RC updateRecord (RM_TableData *rel, Record *record);
 extern RC getRecord (RM_TableData *rel, RID id, Record *record);
+extern RC updateScan (RM_TableData *rel, Record *record,Record *updaterecord, RM_ScanHandle *scan);
 
 // scans
 extern RC startScan (RM_TableData *rel, RM_ScanHandle *scan, Expr *cond);

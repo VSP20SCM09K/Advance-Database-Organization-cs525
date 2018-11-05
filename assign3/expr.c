@@ -8,25 +8,25 @@
 
 // implementations
 RC 
-valueEquals (Value *left, Value *right, Value *result)
+valueEquals (Value *le, Value *ri, Value *rlt)
 {
-  if(left->dt != right->dt)
-    THROW(RC_RM_COMPARE_VALUE_OF_DIFFERENT_DATATYPE, "equality comparison only supported for values of the same datatype");
+  if(le->dt != ri->dt)
+    THROW(RC_RM_COMPARE_VALUE_OF_DIFFERENT_DATATYPE, "The Comparision is for values of the same data type");
 
-  result->dt = DT_BOOL;
+  rlt->dt = DT_BOOL;
   
-  switch(left->dt) {
+  switch(le->dt) {
   case DT_INT:
-    result->v.boolV = (left->v.intV == right->v.intV);
+    rlt->v.boolV = (le->v.intV == ri->v.intV);
     break;
   case DT_FLOAT:
-    result->v.boolV = (left->v.floatV == right->v.floatV);
+    rlt->v.boolV = (le->v.floatV == ri->v.floatV);
     break;
   case DT_BOOL:
-    result->v.boolV = (left->v.boolV == right->v.boolV);
+    rlt->v.boolV = (le->v.boolV == ri->v.boolV);
     break;
   case DT_STRING:
-    result->v.boolV = (strcmp(left->v.stringV, right->v.stringV) == 0);
+    rlt->v.boolV = (strcmp(le->v.stringV, ri->v.stringV) == 0);
     break;
   }
 
@@ -34,24 +34,24 @@ valueEquals (Value *left, Value *right, Value *result)
 }
 
 RC 
-valueSmaller (Value *left, Value *right, Value *result)
+valueSmaller (Value *le, Value *ri, Value *rlt)
 {
-  if(left->dt != right->dt)
-    THROW(RC_RM_COMPARE_VALUE_OF_DIFFERENT_DATATYPE, "equality comparison only supported for values of the same datatype");
+  if(le->dt != ri->dt)
+    THROW(RC_RM_COMPARE_VALUE_OF_DIFFERENT_DATATYPE, "The comparision is for values of same data types");
 
-  result->dt = DT_BOOL;
+  rlt->dt = DT_BOOL;
   
-  switch(left->dt) {
+  switch(le->dt) {
   case DT_INT:
-    result->v.boolV = (left->v.intV < right->v.intV);
+    rlt->v.boolV = (le->v.intV < ri->v.intV);
     break;
   case DT_FLOAT:
-    result->v.boolV = (left->v.floatV < right->v.floatV);
+    rlt->v.boolV = (le->v.floatV < ri->v.floatV);
     break;
   case DT_BOOL:
-    result->v.boolV = (left->v.boolV < right->v.boolV);
+    rlt->v.boolV = (le->v.boolV < ri->v.boolV);
   case DT_STRING:
-    result->v.boolV = (strcmp(left->v.stringV, right->v.stringV) < 0);
+    rlt->v.boolV = (strcmp(le->v.stringV, ri->v.stringV) < 0);
     break;
   }
 
@@ -59,42 +59,42 @@ valueSmaller (Value *left, Value *right, Value *result)
 }
 
 RC 
-boolNot (Value *input, Value *result)
+boolNot (Value *input, Value *rlt)
 {
   if (input->dt != DT_BOOL)
-    THROW(RC_RM_BOOLEAN_EXPR_ARG_IS_NOT_BOOLEAN, "boolean NOT requires boolean input");
-  result->dt = DT_BOOL;
-  result->v.boolV = !(input->v.boolV);
+    THROW(RC_RM_BOOLEAN_EXPR_ARG_IS_NOT_BOOLEAN, "NOT needs only bool input");
+  rlt->dt = DT_BOOL;
+  rlt->v.boolV = !(input->v.boolV);
 
   return RC_OK;
 }
 
 RC
-boolAnd (Value *left, Value *right, Value *result)
+boolAnd (Value *le, Value *ri, Value *rlt)
 {
-  if (left->dt != DT_BOOL || right->dt != DT_BOOL)
-    THROW(RC_RM_BOOLEAN_EXPR_ARG_IS_NOT_BOOLEAN, "boolean AND requires boolean inputs");
-  result->v.boolV = (left->v.boolV && right->v.boolV);
+  if (le->dt != DT_BOOL || ri->dt != DT_BOOL)
+    THROW(RC_RM_BOOLEAN_EXPR_ARG_IS_NOT_BOOLEAN, "AND requires only bool inputs");
+  rlt->v.boolV = (le->v.boolV && ri->v.boolV);
 
   return RC_OK;
 }
 
 RC
-boolOr (Value *left, Value *right, Value *result)
+boolOr (Value *le, Value *ri, Value *rlt)
 {
-  if (left->dt != DT_BOOL || right->dt != DT_BOOL)
-    THROW(RC_RM_BOOLEAN_EXPR_ARG_IS_NOT_BOOLEAN, "boolean OR requires boolean inputs");
-  result->v.boolV = (left->v.boolV || right->v.boolV);
+  if (le->dt != DT_BOOL || ri->dt != DT_BOOL)
+    THROW(RC_RM_BOOLEAN_EXPR_ARG_IS_NOT_BOOLEAN, "OR requires only bool inputs");
+  rlt->v.boolV = (le->v.boolV || ri->v.boolV);
 
   return RC_OK;
 }
 
 RC
-evalExpr (Record *record, Schema *schema, Expr *expr, Value **result)
+evalExpr (Record *record, Schema *sch, Expr *expr, Value **rlt)
 {
   Value *lIn;
   Value *rIn;
-  MAKE_VALUE(*result, DT_INT, -1);
+  MAKE_VALUE(*rlt, DT_INT, -1);
 
   switch(expr->type)
     {
@@ -102,29 +102,28 @@ evalExpr (Record *record, Schema *schema, Expr *expr, Value **result)
       {
       Operator *op = expr->expr.op;
       bool twoArgs = (op->type != OP_BOOL_NOT);
-      //      lIn = (Value *) malloc(sizeof(Value));
-      //    rIn = (Value *) malloc(sizeof(Value));
       
-      CHECK(evalExpr(record, schema, op->args[0], &lIn));
+      
+      CHECK(evalExpr(record, sch, op->args[0], &lIn));
       if (twoArgs)
-	CHECK(evalExpr(record, schema, op->args[1], &rIn));
+	CHECK(evalExpr(record, sch, op->args[1], &rIn));
 
       switch(op->type) 
 	{
 	case OP_BOOL_NOT:
-	  CHECK(boolNot(lIn, *result));
+	  CHECK(boolNot(lIn, *rlt));
 	  break;
 	case OP_BOOL_AND:
-	  CHECK(boolAnd(lIn, rIn, *result));
+	  CHECK(boolAnd(lIn, rIn, *rlt));
 	  break;
 	case OP_BOOL_OR:
-	  CHECK(boolOr(lIn, rIn, *result));
+	  CHECK(boolOr(lIn, rIn, *rlt));
 	  break;
 	case OP_COMP_EQUAL:
-	  CHECK(valueEquals(lIn, rIn, *result));
+	  CHECK(valueEquals(lIn, rIn, *rlt));
 	  break;
 	case OP_COMP_SMALLER:
-	  CHECK(valueSmaller(lIn, rIn, *result));
+	  CHECK(valueSmaller(lIn, rIn, *rlt));
 	  break;
 	default:
 	  break;
@@ -137,11 +136,11 @@ evalExpr (Record *record, Schema *schema, Expr *expr, Value **result)
       }
       break;
     case EXPR_CONST:
-      CPVAL(*result,expr->expr.cons);
+      CPVAL(*rlt,expr->expr.cons);
       break;
     case EXPR_ATTRREF:
-      free(*result);
-      CHECK(getAttr(record, schema, expr->expr.attrRef, result));
+      free(*rlt);
+      CHECK(getAttr(record, sch, expr->expr.attrRef, rlt));
       break;
     }
 
